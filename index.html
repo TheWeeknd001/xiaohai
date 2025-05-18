@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>格尚招聘利润分析系统</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <style>
+    /* 基础样式 */
+    body {
+        margin: 0;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f8f9fa;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    /* 双栏输入布局 */
+    .parameter-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .parameter-column {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* 输入卡片样式 */
+    .input-card {
+        background: white;
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        text-align: center;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .input-card:active {
+        transform: scale(0.96);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* 单位符号 */
+    .unit-yuan::after,
+    .unit-percent::after {
+        position: absolute;
+        right: 20%;
+        top: 55%;
+        transform: translateY(-50%);
+        color: #95a5a6;
+        pointer-events: none;
+    }
+
+    .unit-yuan::after { content: "元"; }
+    .unit-percent::after { content: "%"; }
+
+    /* 输入框样式 */
+    .input-card input {
+        width: 70%;
+        padding: 10px 15%;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        text-align: center;
+    }
+
+    /* 结果展示区 */
+    .results-panel {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin: 20px 0;
+    }
+
+    .result-card {
+        padding: 16px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        text-align: center;
+    }
+
+    /* 图表容器 */
+    .chart-container {
+        height: 55vw;
+        max-height: 400px;
+        margin: 24px 0;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 双栏输入模块 -->
+        <div class="parameter-section">
+            <!-- 左边栏 - 业务参数 -->
+            <div class="parameter-column">
+                <div class="input-card">
+                    <label>面试人数 (N)</label>
+                    <input type="number" id="interviewCount" value="50">
+                </div>
+                <div class="input-card">
+                    <label>入职人数 (M)</label>
+                    <input type="number" id="hiredCount" value="10">
+                </div>
+                <div class="input-card">
+                    <label>单入职收费 (X)</label>
+                    <input type="number" id="feePerHire" value="3000">
+                </div>
+            </div>
+
+            <!-- 右边栏 - 薪资参数 -->
+            <div class="parameter-column">
+                <div class="input-card">
+                    <label>员工底薪 (S)</label>
+                    <input type="number" id="baseSalary" value="3500">
+                </div>
+                <div class="input-card unit-yuan">
+                    <label>面试提成</label>
+                    <input type="number" id="interviewBonus" value="20">
+                </div>
+                <div class="input-card unit-percent">
+                    <label>入职提成率</label>
+                    <input type="number" id="hiringRate" value="30">
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据展示 -->
+        <div class="results-panel">
+            <div class="result-card">
+                <div>总收入</div>
+                <div id="totalIncome">¥0</div>
+            </div>
+            <div class="result-card">
+                <div>总成本</div>
+                <div id="totalCost">¥0</div>
+            </div>
+            <div class="result-card">
+                <div>净利润</div>
+                <div id="netProfit">¥0</div>
+            </div>
+            <div class="result-card">
+                <div>利润率</div>
+                <div id="profitMargin">0%</div>
+            </div>
+        </div>
+
+        <!-- 可视化图表 -->
+        <div class="chart-container">
+            <canvas id="mainChart"></canvas>
+        </div>
+    </div>
+
+<script>
+// 初始化配置
+const formatter = new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: 'CNY'
+});
+
+let chart;
+
+// 核心计算函数
+function calculate() {
+    const inputs = {
+        N: parseInt(document.getElementById('interviewCount').value) || 0,
+        M: parseInt(document.getElementById('hiredCount').value) || 0,
+        X: parseInt(document.getElementById('feePerHire').value) || 0,
+        S: parseInt(document.getElementById('baseSalary').value) || 0,
+        B: parseInt(document.getElementById('interviewBonus').value) || 0,
+        R: parseInt(document.getElementById('hiringRate').value) || 0
+    };
+
+    const totalIncome = inputs.N * 50 + inputs.M * inputs.X;
+    const totalCost = inputs.S + (inputs.N * inputs.B) + (inputs.M * inputs.X * inputs.R / 100);
+    const netProfit = totalIncome - totalCost;
+    const profitMargin = totalIncome > 0 ? (netProfit / totalIncome * 100).toFixed(1) : 0;
+
+    // 更新显示
+    document.getElementById('totalIncome').textContent = formatter.format(totalIncome);
+    document.getElementById('totalCost').textContent = formatter.format(totalCost);
+    document.getElementById('netProfit').textContent = formatter.format(netProfit);
+    document.getElementById('profitMargin').textContent = profitMargin + '%';
+
+    // 更新图表
+    if(chart) {
+        chart.data.datasets[0].data = [totalIncome, totalCost, netProfit];
+        chart.update();
+    }
+}
+
+// 初始化图表
+function initChart() {
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['总收入', '总成本', '净利润'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: ['#4CAF50', '#F44336', '#2196F3'],
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${formatter.format(ctx.parsed.y)}`
+                    }
+                }
+            }
+        }
+    });
+}
+
+// 事件监听（带防抖）
+let timeout;
+document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(calculate, 300);
+    });
+});
+
+// 触摸反馈
+document.querySelectorAll('.input-card').forEach(card => {
+    card.addEventListener('touchstart', () => {
+        card.style.transform = 'scale(0.96)';
+    });
+    card.addEventListener('touchend', () => {
+        card.style.transform = 'scale(1)';
+    });
+});
+
+// 初始化
+window.addEventListener('load', () => {
+    initChart();
+    calculate();
+});
+</script>
+</body>
+</html>
